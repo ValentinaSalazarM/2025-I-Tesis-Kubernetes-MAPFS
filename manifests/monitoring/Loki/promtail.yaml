@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  namespace: mapfs
+spec:
+  selector:
+    matchLabels:
+      name: promtail
+  template:
+    metadata:
+      labels:
+        name: promtail
+    spec:
+      initContainers:
+      - name: config-init
+        image: alpine:3.18
+        command:
+          - sh
+          - -c
+          - |
+            apk add --no-cache gettext && \
+            envsubst < /tmp/config/promtail-config-template.yml \
+                     > /etc/promtail/promtail-config.yml
+        env:
+          - name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        volumeMounts:
+          - name: config-template
+            mountPath: /tmp/config
+          - name: promtail-config-out
+            mountPath: /etc/promtail
+
+      containers:
+      - name: promtail
+        image: grafana/promtail:2.8.2
+        args:
+          - -config.file=/etc/promtail/promtail-config.yml
+        env:
+          - name: HOSTNAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+        volumeMounts:
+          - name: varlog
+            mountPath: /var/log
+            readOnly: true
+          - name: pods
+            mountPath: /var/log/pods
+            readOnly: true
+          - name: docker-containers
+            mountPath: /var/lib/docker/containers
+            readOnly: true
+          - name: positions
+            mountPath: /var/lib/promtail
+          - name: promtail-config-out
+            mountPath: /etc/promtail
+        resources:
+          requests:
+            cpu:    "100m"
+            memory: "128Mi"
+          limits:
+            cpu:    "250m"
+            memory: "256Mi"
+
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: pods
+          hostPath:
+            path: /var/log/pods
+        - name: docker-containers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: positions
+          emptyDir: {}
+        - name: config-template
+          configMap:
+            name: promtail-config
+        - name: promtail-config-out
+          emptyDir: {}

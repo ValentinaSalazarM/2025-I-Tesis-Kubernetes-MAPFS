@@ -1,0 +1,123 @@
+############################
+# 1. Headless Service (DNS)
+############################
+apiVersion: v1
+kind: Service
+metadata:
+  name: mapfs-gateway          # <— debe coincidir con spec.serviceName del StatefulSet
+  namespace: mapfs
+spec:
+  clusterIP: None              # ← headless
+  publishNotReadyAddresses: true
+  selector:
+    app: mapfs-gateway
+  ports:
+  - name: socket               # Device ↔ Gateway (MAPFS)
+    port: 5000
+    targetPort: 5000
+  - name: revocation           # Gateway ↔ Cloud
+    port: 6000
+    targetPort: 6000
+
+
+---
+
+
+########################################
+# 2. Service para métricas Prometheus
+########################################
+apiVersion: v1
+kind: Service
+metadata:
+  name: mapfs-gateway-metrics
+  namespace: mapfs
+  labels:
+    monitoring: prometheus
+spec:
+  selector:
+    app: mapfs-gateway
+  ports:
+  - name: prometheus
+    port: 8010
+    targetPort: 8010
+  type: ClusterIP
+
+
+---
+
+
+###########################
+# 3. StatefulSet Gateway
+###########################
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mapfs-gateway
+  namespace: mapfs
+spec:
+  serviceName: mapfs-gateway   # <— referencia al headless
+  replicas: 2
+  podManagementPolicy: Parallel      # arranque simultáneo; cámbialo si necesitas orden
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: mapfs-gateway
+  template:
+    metadata:
+      labels:
+        app: mapfs-gateway
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8010"
+    spec:
+      terminationGracePeriodSeconds: 30   # tiempo para cerrar sockets
+      containers:
+      - name: mapfs-gateway
+        image: mapfs-gateway:latest
+        imagePullPolicy: Never
+        env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+        command: ["python", "-m", "gateway.mapfs_gateway"]
+        ports:
+        - containerPort: 8010   # métricas
+        - containerPort: 5000   # Device‑Gateway
+        - containerPort: 6000   # revocación
+        readinessProbe:         # opcional: espera a que abra el socket
+          tcpSocket:
+            port: 5000
+          periodSeconds: 5
+        lifecycle:
+          preStop:
+            exec:
+              command:
+              - /bin/sh
+              - -c
+              - "sleep 15"      # drenar conexiones antes de SIGTERM
+        volumeMounts:
+        - name: logs
+          mountPath: /logs
+      volumes:
+      - name: logs
+        emptyDir: {} 
+
+
+---
+
+
+###################################################
+# 4. (Opcional) PodDisruptionBudget para el Gateway
+###################################################
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mapfs-gateway-pdb
+  namespace: mapfs
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mapfs-gateway

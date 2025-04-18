@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - manifests/base/configmap.yaml
+  - manifests/base/cloud-deployment.yaml
+  - manifests/base/gateway-statefulset.yaml
+  - manifests/base/device-deployment.yaml
+  - manifests/monitoring/pv-pvc-monitoring.yaml
+  - manifests/monitoring/Loki/promtail-configmap.yaml
+  - manifests/monitoring/Loki/promtail.yaml
+  - manifests/monitoring/Loki/loki-configmap.yaml
+  - manifests/monitoring/Loki/loki.yaml
+  - manifests/monitoring/Prometheus/cluster-role.yaml
+  - manifests/monitoring/Prometheus/prometheus-configmap.yaml
+  - manifests/monitoring/Prometheus/prometheus.yaml
+  - manifests/monitoring/node-exporter.yaml
+  - manifests/monitoring/grafana-datasources.yaml
+  - manifests/monitoring/grafana.yaml
+  - manifests/locust/locust-master.yaml
+  - manifests/locust/locust-worker.yaml
+  - manifests/locust/locust-metrics-exporter.yaml
+  - manifests/sniffing/pv-pvc-shared-data.yml
+  - manifests/sniffing/sniffer-capture.yml
+  - manifests/sniffing/sniffer-replicate.yml

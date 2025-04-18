@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mapfs-cloud
+  namespace: mapfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mapfs-cloud
+  template:
+    metadata:
+      labels:
+        app: mapfs-cloud
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8011"
+        # Opcional: prometheus.io/path: "/metrics"  (si el endpoint es diferente al default)
+    spec:
+      containers:
+        - name: mapfs-cloud
+          image: mapfs-cloud:latest
+          imagePullPolicy: Never
+          command: ["python", "-m", "cloud.mapfs_cloud"]
+          ports:
+            - containerPort: 8011
+            - containerPort: 5001
+          volumeMounts:
+            - name: logs
+              mountPath: /logs
+      volumes:
+      - name: logs
+        emptyDir: {}  
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mapfs-cloud
+  namespace: mapfs
+spec:
+  selector:
+    app: mapfs-cloud
+  ports:
+  - name: prometheus
+    port: 8011
+    targetPort: 8011
+  - name: socket
+    port: 5001
+    targetPort: 5001
+  type: ClusterIP
+

@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sniffer-capture
+  namespace: mapfs
+  labels:
+    app: sniffer-capture
+spec:
+  selector:
+    matchLabels:
+      app: sniffer-capture
+  template:
+    metadata:
+      labels:
+        app: sniffer-capture
+    spec:
+      # hostNetwork: true => Pod comparte red con el host, como network_mode: host en Docker
+      hostNetwork: true
+      # También es frecuente usar hostPID: true y/o hostIPC: true si hiciera falta
+      securityContext:
+        runAsUser: 0
+      containers:
+      - name: sniffer-capture
+        image: sniffer-capture:latest
+        imagePullPolicy: Never  
+        # Si necesitas privilegios completos en lugar de solo NET_ADMIN:
+        securityContext:
+          privileged: true
+          capabilities:
+            add: ["NET_ADMIN","NET_RAW"]
+        volumeMounts:
+          - name: shared-data
+            mountPath: /shared_data    # donde guardará los PCAP
+          - name: logs
+            mountPath: /logs          # donde guardará logs
+        env:
+          - name: LOG_DIR
+            value: /logs
+          - name: SHARED_DIR
+            value: /shared_data
+      volumes:
+          - name: shared-data
+            persistentVolumeClaim:
+              claimName: sniffer-shared-pvc
+          - name: logs
+            emptyDir: {}
+  updateStrategy:
+    type: RollingUpdate

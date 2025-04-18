@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: loki-data-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /mnt/data/loki
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-data-pvc
+  namespace: mapfs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loki
+  namespace: mapfs
+  labels:
+    app: loki
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+    spec:
+      containers:
+        - name: loki
+          image: grafana/loki:2.8.2
+          securityContext:
+            runAsUser: 0  # Ejecutar como root para evitar problemas de permisos
+            runAsGroup: 0
+          args:
+            - '-config.file=/mnt/config/loki-config.yml'  # Ruta del archivo de configuración
+          ports:
+            - containerPort: 3100  # Puerto expuesto por Loki
+          volumeMounts:
+            - name: loki-config  # Montar el ConfigMap
+              mountPath: /mnt/config
+            - name: loki-data  # Montar el volumen persistente
+              mountPath: /loki
+          resources:                
+            requests:               
+              cpu:    "200m"        # 0.2 vCPU
+              memory: "256Mi"
+            limits:                
+              cpu:    "500m"        # 0.5 vCPU
+              memory: "512Mi"
+
+      volumes:
+        - name: loki-config  # ConfigMap para la configuración de Loki
+          configMap:
+            name: loki-config
+        - name: loki-data  # Volumen persistente para los datos de Loki
+          persistentVolumeClaim:
+            claimName: loki-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loki
+  namespace: mapfs
+spec:
+  selector:
+    app: loki
+  ports:
+    - port: 3100  # Puerto del servicio
+      targetPort: 3100  # Puerto del contenedor

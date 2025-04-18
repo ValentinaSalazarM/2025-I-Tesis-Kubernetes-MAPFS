@@ -1,0 +1,18 @@
+# Usa la imagen base oficial de Python
+FROM python:3.9-slim
+
+# Instalar tcpdump y dependencias
+RUN apt-get update && apt-get install -y tcpdump && rm -rf /var/lib/apt/lists/*
+
+# Copiar el script y los requisitos
+COPY ./scripts /scripts
+WORKDIR /scripts
+
+# Instalar dependencias de Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Exponer el puerto 8000 para FastAPI
+EXPOSE 8000
+
+# Especifica el comando de inicio
+CMD ["uvicorn", "replicate_script:app", "--host", "0.0.0.0", "--port", "8000"]

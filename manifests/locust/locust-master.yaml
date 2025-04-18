@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-master
+  namespace: mapfs
+  labels:
+    app: locust
+    role: master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust
+      role: master
+  template:
+    metadata:
+      labels:
+        app: locust
+        role: master
+    spec:
+      containers:
+      - name: locust-master
+        image: mapfs-locust-image:latest
+        imagePullPolicy: Never  
+        args:                    # ← sin --host aquí; se pasa por env‑vars
+          - "--master"
+          - "--web-port"
+          - "8089"
+          - "--locustfile"
+          - "/scripts/load_tests.py"
+        ports:
+          - containerPort: 8089   # UI
+          - containerPort: 5557   # RPC
+          - containerPort: 5558
+        env:
+          - name: GATEWAY_HOST
+            value: "mapfs-gateway.mapfs.svc.cluster.local"
+          - name: GATEWAY_PORT
+            value: "5000"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-master
+  namespace: mapfs
+spec:
+  selector:
+    app: locust
+    role: master
+  type: NodePort         # Deja NodePort solo para la UI
+  ports:
+    - name: web          # UI 8089 → 30002
+      port: 8089
+      targetPort: 8089
+      nodePort: 30002
+    - name: comm1        # Puertos internos para workers (ClusterIP basta)
+      port: 5557
+      targetPort: 5557
+    - name: comm2
+      port: 5558
+      targetPort: 5558

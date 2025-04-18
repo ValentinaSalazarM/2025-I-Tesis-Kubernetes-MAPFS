@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-metrics-exporter
+  namespace: mapfs
+  labels:
+    app: locust-metrics-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: locust-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app: locust-metrics-exporter
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9646"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: locust-exporter
+          image: containersol/locust_exporter
+          ports:
+            - containerPort: 9646
+          env:
+            - name: LOCUST_EXPORTER_WEB_LISTEN_ADDRESS
+              value: ":9646"
+            - name: LOCUST_EXPORTER_WEB_TELEMETRY_PATH
+              value: "/metrics"
+            - name: LOCUST_EXPORTER_URI
+              value: "http://locust-master:8089"   # o locust-master.mapfs.svc.cluster.local
+            - name: LOCUST_EXPORTER_LOG_LEVEL
+              value: "debug"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: locust-metrics-exporter
+  namespace: mapfs
+spec:
+  selector:
+    app: locust-metrics-exporter
+  type: ClusterIP
+  ports:
+    - name: metrics
+      port: 9646
+      targetPort: 9646

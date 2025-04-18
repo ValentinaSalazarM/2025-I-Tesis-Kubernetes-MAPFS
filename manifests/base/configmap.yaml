@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mapfs
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mapfs-config
+  namespace: mapfs
+data:
+  log_dir: "/logs"

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: locust-worker
+  namespace: mapfs
+  labels:
+    app: locust
+    role: worker
+spec:
+  replicas: 1          # escala según la carga que necesites
+  selector:
+    matchLabels:
+      app: locust
+      role: worker
+  template:
+    metadata:
+      labels:
+        app: locust
+        role: worker
+    spec:
+      containers:
+        - name: locust-worker
+          image: mapfs-locust-image:latest
+          imagePullPolicy: Never  
+          # conecta con el master via DNS interno
+          args:
+            - "--worker"
+            - "--master-host=locust-master"        # nombre del Service/Pod master
+            - "--locustfile=/scripts/load_tests.py"
+          env:
+            - name: GATEWAY_HOST
+              value: "mapfs-gateway.mapfs.svc.cluster.local"      # o gateway‑0.… si quieres una réplica fija
+            - name: GATEWAY_PORT
+              value: "5000"

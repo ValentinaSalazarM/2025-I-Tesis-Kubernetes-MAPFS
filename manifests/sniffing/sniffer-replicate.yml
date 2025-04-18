@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sniffer-replicate
+  namespace: mapfs
+  labels:
+    app: sniffer-replicate
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sniffer-replicate
+  template:
+    metadata:
+      labels:
+        app: sniffer-replicate
+    spec:
+      securityContext:          
+        runAsUser: 1000
+        fsGroup:   1000
+      containers:
+      - name: sniffer-replicate
+        image: sniffer-replicate:latest  
+        imagePullPolicy: Never  
+        ports:
+          - containerPort: 8000
+        volumeMounts:
+            - name: shared-data
+              mountPath: /shared_data    # PCAPs generadas por sniffer-capture
+            - name: logs
+              mountPath: /logs            # Logs de replicación
+        env:
+          - name: LOG_DIR
+            value: /logs
+          - name: SHARED_DIR
+            value: /shared_data
+      volumes:
+          - name: shared-data
+            persistentVolumeClaim:
+              claimName: sniffer-shared-pvc
+          - name: logs
+            emptyDir: {}
+
+
+---
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: sniffer-replicate
+  namespace: mapfs
+spec:
+  selector:
+    app: sniffer-replicate
+  ports:
+    - name: http
+      port: 8000        # Puerto que escuchará el Ingress
+      targetPort: 8000  # Puerto dentro del Pod
+
+
+---
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sniffer-replicate
+  namespace: mapfs
+spec:
+  ingressClassName: nginx     # ← este reemplaza a la annotation obsoleta
+  rules:
+    - host: replicate.mapfs.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sniffer-replicate
+                port:
+                  number: 8000

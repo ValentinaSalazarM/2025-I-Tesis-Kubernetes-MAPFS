@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: mapfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.47.0
+          securityContext:
+              runAsUser: 0
+              runAsGroup: 0
+          args:
+            - '--config.file=/etc/prometheus/prometheus-config.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=1y'
+            - '--web.enable-lifecycle'
+          ports:
+            - containerPort: 9090
+          volumeMounts:
+            - name: prometheus-config
+              mountPath: /etc/prometheus
+            - name: prometheus-data
+              mountPath: /prometheus
+      volumes:
+        - name: prometheus-config # ConfigMap para la configuración de Prometheus
+          configMap:
+            defaultMode: 420
+            name: prometheus-config
+        - name: prometheus-data # Volumen persistente para los datos de Prometheus
+          persistentVolumeClaim:
+            claimName: prometheus-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: mapfs
+spec:
+  selector:
+    app: prometheus
+  type: NodePort
+  ports:
+    - port: 9090         # Puerto dentro del clúster (ClusterIP)
+      targetPort: 9090   # Puerto del contenedor
+      nodePort: 30001    # Puerto en los nodos del clúster
