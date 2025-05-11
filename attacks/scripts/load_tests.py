@@ -48,7 +48,7 @@ class SocketUser(User):
 
     @task
     def mutual_authentication(self):
-        logger.info("Ejecutando un ataque de DoS al servicio de autenticación.")
+        logger.info("[AUTH] Ejecutando un ataque de DoS al servicio de autenticación.")
         try:
             # Paso 1: Enviar mensaje "hello" al gateway
             step_start = time.time()
@@ -70,7 +70,7 @@ class SocketUser(User):
                 response_length=len(str(gateway_token)),
                 exception=None,
             )
-            logger.info("Token recibido: %s", gateway_token)
+            logger.info("[AUTH] Token recibido: %s", gateway_token)
 
             # Paso 3: Enviar mensaje de autenticación del IoT
             step_start = time.time()
@@ -95,11 +95,11 @@ class SocketUser(User):
                 response_length=len(str(response)),
                 exception=None,
             )
-            logger.info("Respuesta final: %s", response)
+            logger.info("[AUTH] Respuesta final: %s", response)
             
         except Exception as e:
             # Registrar la solicitud como fallida
-            logger.error("Error durante la autenticación: %s", e)
+            logger.error("[AUTH] Error durante la autenticación: %s", e)
             events.request.fire(
                 request_type="socket",
                 name="mutual_authentication",

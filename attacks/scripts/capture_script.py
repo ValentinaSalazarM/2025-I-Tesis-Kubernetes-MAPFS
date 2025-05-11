@@ -13,13 +13,13 @@ LOG_DIR    = os.getenv("LOG_DIR", "/logs")
 # Configuración del logger
 logging.basicConfig(
     level=logging.INFO,
-    format="MAPFS time=%(asctime)s level=%(levelname)s msg=\'%(message)s\'",
+    format="MAPFS src=CAPTURE level=%(levelname)s msg=\'%(message)s\'",
     handlers=[logging.FileHandler(f"{LOG_DIR}/ATTACK-capture.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("Sniffer-Capture")
 
 # Configuración
-CAPTURE_INTERVAL = 30
+CAPTURE_INTERVAL = 40
 MIN_FILE_SIZE = 1024
 
 def analyze_pcap(pcap_file):

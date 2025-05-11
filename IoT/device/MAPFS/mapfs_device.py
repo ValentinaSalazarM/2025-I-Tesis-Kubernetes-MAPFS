@@ -6,7 +6,7 @@ from prometheus_client import start_http_server, Counter, Histogram
 # Configuración del logger
 logging.basicConfig(
     level=logging.INFO,
-    format="MAPFS time=%(asctime)s level=%(levelname)s msg=%(message)s",
+    format="MAPFS src=DEVICE level=%(levelname)s msg=%(message)s",
     handlers=[logging.FileHandler("/logs/MAPFS-device.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("Device")
@@ -102,14 +102,13 @@ def IoT_registration():
             # Paso 4: Recibir sigma_a, Y_a_pub_key, h_a
             second_response = sock.recv(4096)
             if not second_response:
-                logger.error("[REG] No se recibieron los parámetros del CA.")
-                return
+                raise KeyError("[REG] No se recibieron los parámetros del CA.")
             second_message = json.loads(second_response.decode("utf-8"))
             sigma_a = second_message.get("sigma_a")
             Y_a_pub_key_dict = second_message.get("Y_a_pub_key")
             h_a = second_message.get("h_a")
             if sigma_a is None or Y_a_pub_key_dict is None or h_a is None:
-                raise KeyError("[REG] Faltan parámetros en la respuesta del CA.")
+                raise KeyError("Faltan parámetros sigma_a, Y_a_pub_key_dict o h_a.")
             logger.info(f"[REG] Parámetros recibidos del CA: {second_message}.")
 
             # Guardar los parámetros de registro
@@ -126,11 +125,11 @@ def IoT_registration():
             }
             logger.info(f"[REG] Registro completado exitosamente.")
     except KeyError as e:
-        logger.error(f"[REG] Clave faltante: {e}")
+        logger.error(f"[REG] Clave faltante: {e.args[0]}")
     except socket.error as e:
-        logger.error(f"[REG] Error en la comunicación por socket: {e}")
+        logger.error(f"[REG] Error en la comunicación por socket: {e.args[0]}")
     except Exception as e:
-        logger.error(f"[REG] Error inesperado durante el registro: {e}")
+        logger.error(f"[REG] Error inesperado durante el registro: {e.args[0]}")
 
 
 #######################################################
@@ -182,7 +181,7 @@ def mutual_authentication():
 
         gateway_fqdn = first_response.get("gateway_fqdn")
         if not gateway_fqdn:
-            raise KeyError("No recibí el gateway_fqdn del Gateway")
+            raise KeyError("No se recibió el gateway_fqdn del Gateway")
         
         # Paso 2: Procesar el token de autenticación del gateway (W, ID_w, X_w_pub_key, Y_w_pub_key, sigma_z)
         if not all(
@@ -190,7 +189,7 @@ def mutual_authentication():
             for key in ["W", "ID_w", "X_w_pub_key", "Y_w_pub_key", "sigma_z"]
         ):
             raise KeyError(
-                "[AUTH] Faltan argumentos en la respuesta del dispositivo IoT."
+                "Faltan argumentos en la respuesta del dispositivo IoT."
             )
         logger.info(
             f"[AUTH] Token de autenticación del Gateway recibido: {first_response}"
@@ -225,13 +224,13 @@ def mutual_authentication():
         else:
             logger.info("[AUTH] Autenticación mutua culminada.")
     except PermissionError as e:
-        logger.error(f"[AUTH] Error de autenticación: {e}")
+        logger.error(f"[AUTH] Error de autenticación: {e.args[0]}")
     except KeyError as e:
-        logger.error(f"[AUTH] Error de datos faltantes en la respuesta: {e}")
+        logger.error(f"[AUTH] Error de datos faltantes en la respuesta: {e.args[0]}")
     except socket.error as e:
-        logger.error(f"[AUTH] Error en la comunicación por socket: {e}")
+        logger.error(f"[AUTH] Error en la comunicación por socket: {e.args[0]}")
     except Exception as e:
-        logger.error(f"[AUTH] Error inesperado: {e}")
+        logger.error(f"[AUTH] Error inesperado: {e.args[0]}")
         close_socket()
 
 
@@ -388,7 +387,7 @@ def send_encrypted_metrics():
                 or "session_key" not in authentication_parameters
             ):
                 logger.error("[METRICS] No hay sesión activa. Autenticación requerida.")
-                raise ValueError("El dispositivo no está autenticado con el Gateway.")
+                raise PermissionError("El dispositivo no está autenticado con el Gateway.")
 
             # Generar datos simulados del sensor
             sensor_data = {
@@ -405,7 +404,7 @@ def send_encrypted_metrics():
             # Obtener la clave de sesión
             K_s_bytes = authentication_parameters["session_key"]
             if not K_s_bytes:
-                raise ValueError("[METRICS] Clave de sesión no encontrada.")
+                raise KeyError("Clave de sesión no encontrada.")
 
             # Cifrar las métricas con AES en modo CBC
             cipher = AES.new(K_s_bytes, AES.MODE_CBC, iv)
@@ -446,16 +445,17 @@ def send_encrypted_metrics():
                         "Dispositivo no autenticado. Deteniendo envío de métricas."
                     )
             except socket.error as e:
-                logger.error(f"[METRICS] Error de comunicación con el Gateway: {e}")
+                logger.error(f"[METRICS] Error de comunicación con el Gateway: {e.args[0]}")
                 sock.close()
 
             # Esperar antes de enviar la siguiente métrica
             time.sleep(60)
-
+    except KeyError as e:
+        logger.error(f"[AUTH] Error de datos faltantes en la respuesta: {e.args[0]}")
     except PermissionError as e:
-        logger.error(f"[METRICS] Error de autenticación: {e}")
+        logger.error(f"[METRICS] Error de autenticación: {e.args[0]}")
     except Exception as e:
-        logger.error(f"[METRICS] Error inesperado en el envío de métricas: {e}")
+        logger.error(f"[METRICS] Error inesperado en el envío de métricas: {e.args[0]}")
 
 
 #######################################################
@@ -474,11 +474,15 @@ def initialize_socket():
             gateway_socket.connect((GATEWAY_HOST, GATEWAY_PORT))
             logger.info(f"Conectado al Gateway en {GATEWAY_HOST}:{GATEWAY_PORT}")
         except socket.error as e:
-            logger.error(f"Error al conectar con el Gateway: {e}")
+            logger.error(f"Error al conectar con el Gateway: {e.args[0]}")
             gateway_socket = None
             raise e
 
+
 def initialize_metrics_socket():
+    """
+    Inicializa un socket persistente para enviar métricas al mismo Gateway con quien se autenticó.
+    """
     fqdn = authentication_parameters.get("gateway_fqdn")
     if not fqdn:
         raise RuntimeError("Debe autenticarse antes de enviar métricas")
@@ -497,7 +501,7 @@ def close_socket():
             gateway_socket.close()
             logger.info("Socket con el Gateway cerrado correctamente.")
         except socket.error as e:
-            logger.error(f"Error al cerrar el socket: {e}")
+            logger.error(f"Error al cerrar el socket: {e.args[0]}")
         finally:
             gateway_socket = None
 
@@ -541,7 +545,7 @@ def send_and_receive_persistent_socket(message_dict):
         # logger.info(f"send_and_receive_persistent_socket- decoded_response={decoded_message}")
         return decoded_message
     except socket.error as e:
-        logger.error(f"Error en la comunicación por socket persistente: {e}")
+        logger.error(f"Error en la comunicación por socket persistente: {e.args[0]}")
         gateway_socket = None  # Marcar el socket como no válido
         raise e
 
@@ -554,7 +558,6 @@ if __name__ == "__main__":
     start_http_server(8012)
     # Realiza el registro y la autenticación mutua
     IoT_registration()
-    # Simula el envío de métricas al Gateway
     mutual_authentication()
-
+    # Simula el envío de métricas al Gateway
     send_encrypted_metrics()

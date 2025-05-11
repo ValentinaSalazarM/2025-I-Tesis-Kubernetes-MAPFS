@@ -23,7 +23,7 @@ LOG_DIR    = os.getenv("LOG_DIR", "/logs")
 # Configuración del logger
 logging.basicConfig(
     level=logging.INFO,
-    format="MAPFS time=%(asctime)s level=%(levelname)s msg=\'%(message)s\'",
+    format="MAPFS src=REPLICATE level=%(levelname)s msg=\'%(message)s\'",
     handlers=[logging.FileHandler(f"{LOG_DIR}/ATTACK-replicate.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("Sniffer-Replicate")
@@ -53,7 +53,6 @@ def find_analysis_files():
         for f in os.listdir(SHARED_DIR)
         if f.endswith(".analysis.json")
         and not f.endswith(".processed")
-        and not f.endswith(".failed")
         and os.path.getsize(os.path.join(SHARED_DIR, f)) > MIN_FILE_SIZE
     ]
 
@@ -177,7 +176,7 @@ def replicate_authentication(direction):
                     logger.info("Réplica completada exitosamente.")
                     return True
 
-                logger.error("La réplica no finalizó correctamente.")
+                logger.info("La réplica no finalizó correctamente.")
 
             except socket.timeout:
                 logger.error("Timeout en la comunicación con el Gateway.")
@@ -233,7 +232,7 @@ def replicate_revocation(using_intercepted_parameters):
             s.sendall(json.dumps(payload).encode())
             response = s.recv(4096)
             last_response = json.loads(response.decode())
-            if last_response.get("status") == "failed" or last_response.get("status") == "error":
+            if last_response.get("status") == "error":
                 logger.info("La solicitud de revocación no fue procesada exitosamente.")
                 return False
             else:
@@ -277,7 +276,6 @@ def replicate_send_metrics():
         # Construir el payload
         payload = {
             "operation": "send_metrics",
-            "ID_obfuscated": device_parameters.get("ID*"),
             "A": device_parameters.get("one_time_public_key"),
             "W": gateway_parameters.get("W"),
             "iv": base64.b64encode(iv).decode("utf-8"),
@@ -317,21 +315,6 @@ def replicate_send_metrics():
         logger.error(f"Error enviando métricas cifradas: {str(e)}")
         return False
 
-
-def mark_file_as_processed(success=True):
-    """Renombra el archivo para marcarlo como procesado o fallido"""
-    global current_file
-    try:
-        if success:
-            new_path = current_file + ".processed"
-        else:
-            new_path = current_file + ".failed"
-
-        os.rename(current_file, new_path)
-        logger.info(f"Archivo marcado como {'procesado' if success else 'fallido'}.")
-    except Exception as e:
-        logger.error(f"Error marcando archivo: {str(e)}")
-
 # Modelo de entrada
 class ChoiceRequest(BaseModel):
     choice: str
@@ -347,26 +330,31 @@ def execute_choice(request: ChoiceRequest):
         files = find_analysis_files()
         if files:
             current_file = os.path.join(SHARED_DIR, files[0])
-            logger.info(f"Archivo seleccionado: {current_file}")
-            extract_parameters_from_analysis()
+            if current_file:
+                logger.info(f"Archivo seleccionado: {current_file}.")
+                extract_parameters_from_analysis()
+            else:
+                return {"message": "No se encuentran archivos disponibles para procesarse."}
+    if current_file:
+        if choice == "1":
+            state = replicate_authentication("device->gateway")
+        elif choice == "2":
+            state = replicate_send_metrics()
+        elif choice == "3":
+            state = replicate_revocation(True)
+        elif choice == "4":
+            state = replicate_revocation(False)
+        elif choice == "5":
+            return {"message": "Saliendo del servicio."}
 
-    if choice == "1":
-        state = replicate_authentication("device->gateway")
-    elif choice == "2":
-        state = replicate_send_metrics()
-    elif choice == "3":
-        state = replicate_revocation(True)
-    elif choice == "4":
-        state = replicate_revocation(False)
-    elif choice == "5":
-        return {"message": "Saliendo del servicio."}
-
-    message = "El ataque fue exitoso." if state else "El ataque no ha sido exitoso."
-    return {"message": message}
+        message = "El ataque fue exitoso." if state else "El ataque no ha sido exitoso."
+        return {"message": message}
 
 # Iniciar servicio al ejecutar
 if __name__ == "__main__":
     os.makedirs("/logs", exist_ok=True)
     os.makedirs("/shared_data", exist_ok=True)
     logger.info("Iniciando servicio de replicación.")
+    
+    # Iniciar interfaz gráfica para que el usuario seleccione el ataque de su interés
     uvicorn.run(app, host="0.0.0.0", port=8000)

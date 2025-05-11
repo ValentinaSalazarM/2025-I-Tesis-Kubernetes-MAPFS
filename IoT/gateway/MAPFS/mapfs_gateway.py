@@ -7,7 +7,7 @@ from prometheus_client import start_http_server, Counter
 # Configuración del logger
 logging.basicConfig(
     level=logging.INFO,
-    format="MAPFS time=%(asctime)s level=%(levelname)s msg=\'%(message)s\'",
+    format="MAPFS src=GATEWAY level=%(levelname)s msg=\'%(message)s\'",
     handlers=[logging.FileHandler("/logs/MAPFS-gateway.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("Gateway")
@@ -67,31 +67,28 @@ def handle_client_connection(client_socket):
     try:
         # Recibir datos del cliente
         data = client_socket.recv(4096)
-        if not data:
-            logger.error("No se recibieron datos del cliente.")
-            return
+        if data:
+            # Decodificar el mensaje
+            message = json.loads(data.decode("utf-8"))
+            logger.info(f"Mensaje recibido: {message}")
 
-        # Decodificar el mensaje
-        message = json.loads(data.decode("utf-8"))
-        logger.info(f"Mensaje recibido: {message}")
+            # Verificar el tipo de operación
+            operation = message.get("operation")
+            if not operation:
+                raise ValueError("Falta el campo 'operation' en el mensaje recibido.")
 
-        # Verificar el tipo de operación
-        operation = message.get("operation")
-        if not operation:
-            raise ValueError("Falta el campo 'operation' en el mensaje recibido.")
-
-        # Redirigir a la función correspondiente
-        if operation == "mutual_authentication":
-            handle_mutual_authentication(client_socket, message)
-        elif operation == "send_metrics":
-            handle_send_metrics(client_socket, message)
-        else:
-            raise ValueError(f"Operación desconocida: {operation}")
+            # Redirigir a la función correspondiente
+            if operation == "mutual_authentication":
+                handle_mutual_authentication(client_socket, message)
+            elif operation == "send_metrics":
+                handle_send_metrics(client_socket, message)
+            else:
+                raise ValueError(f"Operación desconocida: {operation}")
 
     except ValueError as e:
-        logger.error(f"Error en el mensaje recibido: {e}")
+        logger.error(f"Error en el mensaje recibido: {e.args[0]}")
     except Exception as e:
-        logger.error(f"Error durante el manejo de la conexión: {e}")
+        logger.error(f"Error durante el manejo de la conexión: {e.args[0]}")
     finally:
         client_socket.close()
         logger.info("Conexión con el cliente cerrada.")
@@ -99,10 +96,11 @@ def handle_client_connection(client_socket):
 def get_gateway_fqdn():
     pod = os.environ.get("POD_NAME", None)
     if pod:
-        # nombre del headless service + namespace fijos
+        # Nombre del headless service + namespace fijos
         return f"{pod}.mapfs-gateway.mapfs.svc.cluster.local"
-    # fallback: intenta socket.getfqdn()
+    # Fallback: intenta socket.getfqdn()
     return socket.getfqdn()
+
 
 #######################################################
 #                   REGISTRO GATEWAY                  #
@@ -153,16 +151,19 @@ def gateway_registration():
         # Paso 3: Recibir sigma_a, Y_a_pub_key, h_a
         second_response = send_and_receive_persistent_socket(second_payload)
         logger.info("[REG] Respuesta recibida del CA.")
+        
         if not second_response:
-            logger.error("[REG] No se recibieron los parámetros del CA.")
-            return
+            raise KeyError("No se recibieron los parámetros del CA.")
+        
         sigma_w = second_response.get("sigma_w")
         Y_w_pub_key_dict = second_response.get("Y_w_pub_key")
         h_w = second_response.get("h_w")
+        
         if sigma_w is None or Y_w_pub_key_dict is None or h_w is None:
-            raise KeyError("[REG] Faltan parámetros en la respuesta del CA.")
+            raise KeyError("Faltan parámetros en la respuesta del CA.")
+        
         logger.info("[REG] Parámetros recibidos del CA.")
-
+        
         # Guardar los parámetros de registro
         registration_parameters = {
             # Llave privada parcial del Gateway
@@ -179,11 +180,11 @@ def gateway_registration():
             f"[REG] Registro completado exitosamente con los siguientes parámetros."
         )
     except socket.error as e:
-        logger.error(f"[REG] Error de comunicación con el CA: {e}")
+        logger.error(f"[REG] Error de comunicación con el CA: {e.args[0]}")
     except ValueError as e:
-        logger.error(f"[REG] Error en la respuesta del CA: {e}")
+        logger.error(f"[REG] Error en la respuesta del CA: {e.args[0]}")
     except Exception as e:
-        logger.error(f"[REG] Error inesperado: {e}")
+        logger.error(f"[REG] Error inesperado: {e.args[0]}")
     finally:
         close_socket()
         logger.info("[REG] Conexión con el CA cerrada.")
@@ -239,7 +240,7 @@ def handle_mutual_authentication(client_socket, hello_message):
             for key in ["P_1", "P_2", "P_3", "sigma_t", "T_1", "T_2", "s_1", "s_2"]
         ):
             raise KeyError(
-                "[AUTH] Faltan argumentos en la respuesta del dispositivo IoT."
+                "Faltan argumentos en la respuesta del dispositivo IoT."
             )
         logger.info(
             f"[AUTH] Puntos, compromisos y respuestas ZKP del dispositivo recibidos."
@@ -253,14 +254,17 @@ def handle_mutual_authentication(client_socket, hello_message):
         response = {"operation": "mutual_authentication", "status": "success"}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
         logger.info(f"[AUTH] Autenticación mutua culminada.")
+        
     except KeyError as e:
-        logger.error(f"[AUTH] Clave faltante en los datos recibidos: {e}")
+        logger.error(f"[AUTH] Clave faltante en los datos recibidos: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     except Exception as e:
-        logger.error(f"[AUTH] Error durante la autenticación mutua: {e}")
+        logger.error(f"[AUTH] Error durante la autenticación mutua: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     finally:
         client_socket.close()
         close_socket()
@@ -476,12 +480,12 @@ def handle_send_metrics(client_socket, message):
         logger.info("[METRICS] Respuesta enviada al dispositivo IoT.")
 
     except (ValueError, KeyError) as e:
-        logger.error(f"[METRICS] Error en el mensaje recibido: {e}")
+        logger.error(f"[METRICS] Error en el mensaje recibido: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
 
     except Exception as e:
-        logger.error(f"[METRICS] Error inesperado durante el manejo de métricas: {e}")
+        logger.error(f"[METRICS] Error inesperado durante el manejo de métricas: {e.args[0]}")
         response = {"status": "error", "message": "Error inesperado."}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
 
@@ -542,7 +546,7 @@ def report_misbehaving_device():
                             logger.error("Las métricas no han sido procesadas exitosamente.")
 
                 except Exception as e:
-                    logger.error(f"[REVOC] Error al contactar con el Cloud: {e}")
+                    logger.error(f"[REVOC] Error al contactar con el Cloud: {e.args[0]}")
         time.sleep(400)  
 
 
@@ -611,7 +615,7 @@ def listen_for_revocation():
                             f"[REVOC] El dispositivo ya ha sido revocado y bloqueado previamente."
                         )
             except Exception as e:
-                logger.error(f"Error durante la revocación: {e}")
+                logger.error(f"[REVOC] Error durante la revocación: {e.args[0]}")
 
 
 def detect_suspicious_activity(unique_identifier):
@@ -640,7 +644,7 @@ def initialize_socket():
             cloud_socket.connect((CA_HOST, CA_PORT))
             logger.info(f"Conectado al CA en {CA_HOST}:{CA_PORT}")
         except socket.error as e:
-            logger.error(f"Error al conectar con el CA: {e}")
+            logger.error(f"Error al conectar con el CA: {e.args[0]}")
             cloud_socket = None
             raise e
 
@@ -655,7 +659,7 @@ def close_socket():
             cloud_socket.close()
             logger.info("Socket con el CA cerrado correctamente.")
         except socket.error as e:
-            logger.error(f"Error al cerrar el socket: {e}")
+            logger.error(f"Error al cerrar el socket: {e.args[0]}")
         finally:
             cloud_socket = None
 
@@ -699,7 +703,7 @@ def send_and_receive_persistent_socket(message_dict):
         # logger.info(f"send_and_receive_persistent_socket- decoded_response={decoded_message}")
         return decoded_message
     except socket.error as e:
-        logger.error(f"Error en la comunicación por socket persistente: {e}")
+        logger.error(f"Error en la comunicación por socket persistente: {e.args[0]}")
         cloud_socket = None  # Marcar el socket como no válido
         raise e
 

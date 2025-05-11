@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: mapfs
+data:
+  ####################################################################
+  #  Servicio global
+  ####################################################################
+  fluent-bit.conf: |
+    [SERVICE]
+      Flush         1
+      Log_Level     info
+      Parsers_File  parsers.conf
+
+    @INCLUDE input-kubernetes.conf
+    @INCLUDE filter-kubernetes.conf
+    @INCLUDE output-syslog.conf
+    @INCLUDE output-stdout.conf
+
+  ####################################################################
+  #  INPUT – lee todos los logs de pods
+  ####################################################################
+  input-kubernetes.conf: |
+    [INPUT]
+      Name        tail
+      Path        /var/log/pods/*/*/*.log
+      Parser      cri
+      Tag         kube.*                 # ← un único prefijo «kube.»
+
+  ####################################################################
+  #  FILTROS
+  ####################################################################
+  filter-kubernetes.conf: |
+    # 1) Enriquecer con metadata de K8s
+    [FILTER]
+      Name                kubernetes
+      Match               kube.*               # coincide con el tag de arriba
+      Kube_Tag_Prefix     kube.                # corta justo «kube.»
+      Merge_Log           On
+      Keep_Log            Off
+      K8S-Logging.Parser  On
+      K8S-Logging.Exclude On
+
+    # 2) Renombrar el campo 'log' a 'message' para el plugin Syslog
+    [FILTER]
+      Name        modify
+      Match       kube.*
+      Rename      log message
+
+    [FILTER]
+      Name        modify
+      Match       kube.*
+      Add         hostname jpadilla
+
+  ####################################################################
+  #  OUTPUT – envía a Wazuh
+  ####################################################################
+  output-syslog.conf: |
+    [OUTPUT]
+      Name              syslog
+      Match             kube.*
+      Host              34.122.182.239
+      Port              514
+      Mode              tcp
+      Syslog_Format     rfc3164
+      syslog_hostname_key  hostname      
+      syslog_message_key   message       
+      Retry_Limit       5
+  
+  output-stdout.conf: |
+    [OUTPUT]
+      Name   stdout
+      Match  kube.*
+      Format json_lines
+
+  ####################################################################
+  #  PARSER para logs CRI
+  ####################################################################
+  parsers.conf: |
+    [PARSER]
+      Name         cri
+      Format       json
+      Time_Key     time
+      Time_Format  %Y-%m-%dT%H:%M:%S.%L%z

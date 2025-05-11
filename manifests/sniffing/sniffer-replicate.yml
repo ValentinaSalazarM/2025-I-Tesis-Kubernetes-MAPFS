@@ -67,7 +67,7 @@ metadata:
   name: sniffer-replicate
   namespace: mapfs
 spec:
-  ingressClassName: nginx     # ← este reemplaza a la annotation obsoleta
+  ingressClassName: nginx    
   rules:
     - host: replicate.mapfs.local
       http:

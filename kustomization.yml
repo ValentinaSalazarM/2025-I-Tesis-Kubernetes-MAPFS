@@ -22,3 +22,6 @@ resources:
   - manifests/sniffing/pv-pvc-shared-data.yml
   - manifests/sniffing/sniffer-capture.yml
   - manifests/sniffing/sniffer-replicate.yml
+  - manifests/wazuh/fluentbit-rbac.yaml
+  - manifests/wazuh/fluentbit-configmap.yaml
+  - manifests/wazuh/fluentbit-daemonset.yaml

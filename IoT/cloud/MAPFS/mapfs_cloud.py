@@ -6,7 +6,7 @@ from prometheus_client import start_http_server, Counter
 # Configuración del logger
 logging.basicConfig(
     level=logging.INFO,
-    format="MAPFS time=%(asctime)s level=%(levelname)s msg=\'%(message)s\'",
+    format="MAPFS src=CLOUD level=%(levelname)s msg=\'%(message)s\'",
     handlers=[logging.FileHandler("/logs/MAPFS-cloud.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger("Cloud")
@@ -66,33 +66,30 @@ def handle_client_connection(client_socket):
     try:
         # Recibir datos del cliente
         data = client_socket.recv(4096)
-        if not data:
-            logger.error("No se recibieron datos del cliente.")
-            return
+        if data:
+            # Decodificar el mensaje
+            message = decode_message(json.loads(data.decode("utf-8")))
+            logger.info(f"Mensaje recibido: {message}")
 
-        # Decodificar el mensaje
-        message = decode_message(json.loads(data.decode("utf-8")))
-        logger.info(f"Mensaje recibido: {message}")
+            # Verificar el tipo de operación
+            operation = message.get("operation")
+            if not operation:
+                raise ValueError("Falta el campo 'operation' en el mensaje recibido.")
 
-        # Verificar el tipo de operación
-        operation = message.get("operation")
-        if not operation:
-            raise ValueError("Falta el campo 'operation' en el mensaje recibido.")
-
-        # Redirigir a la función correspondiente
-        if operation == "register_gateway":
-            handle_gateway_registration(client_socket)
-        elif operation == "register_device":
-            handle_IoT_registration(client_socket)
-        elif operation == "identify_and_revoke":
-            handle_id_revocation(client_socket, message)
-        else:
-            raise ValueError(f"Operación desconocida: {operation}")
+            # Redirigir a la función correspondiente
+            if operation == "register_gateway":
+                handle_gateway_registration(client_socket)
+            elif operation == "register_device":
+                handle_IoT_registration(client_socket)
+            elif operation == "identify_and_revoke":
+                handle_id_revocation(client_socket, message)
+            else:
+                raise ValueError(f"Operación desconocida: {operation}")
 
     except ValueError as e:
-        logger.error(f"Error en el mensaje recibido: {e}")
+        logger.error(f"Error en el mensaje recibido: {e.args[0]}")
     except Exception as e:
-        logger.error(f"Error durante el manejo de la conexión: {e}")
+        logger.error(f"Error durante el manejo de la conexión: {e.args[0]}")
     finally:
         client_socket.close()
         logger.info("Conexión con el cliente cerrada.")
@@ -133,10 +130,7 @@ def handle_IoT_registration(client_socket):
 
         # Verificar si el dispositivo ya está registrado
         if iot_identity in registered_devices.keys():
-            logger.warning(
-                f"[REG Dispositivo] El dispositivo con ID {iot_identity} ya está registrado."
-            )
-            raise ValueError("El dispositivo ya está registrado.")
+            raise ValueError("El dispositivo con ID {iot_identity} ya está registrado.")
 
         logger.info(
             f"[REG Dispositivo] Recibidos datos del dispositivo IoT: IoT_Identity={iot_identity}, X_a_pub_key={X_a_pub_key_dict}, h_x={h_x_dict}"
@@ -192,17 +186,20 @@ def handle_IoT_registration(client_socket):
         logger.info("[REG Dispositivo] Respuesta enviada al dispositivo IoT.")
 
     except KeyError as e:
-        logger.error(f"Clave faltante en los datos del dispositivo IoT: {e}")
+        logger.error(f"Clave faltante en los datos del dispositivo IoT: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     except ValueError as e:
-        logger.error(f"Error en el registro del dispositivo IoT: {e}")
+        logger.error(f"Error en el registro del dispositivo IoT: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     except Exception as e:
-        logger.error(f"Error inesperado durante el registro del dispositivo IoT: {e}")
+        logger.error(f"Error inesperado durante el registro del dispositivo IoT: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     finally:
         client_socket.close()
         logger.info("[REG Dispositivo] Conexión con el dispositivo IoT cerrada.")
@@ -220,7 +217,7 @@ def handle_gateway_registration(client_socket):
     global registered_gateways, payload_public_keys, Pub_gc_key_xValue, Pub_gc_key_yValue, P_IoT_key_xValue, P_IoT_key_yValue
 
     try:
-        client_ip, client_port = client_socket.getpeername()
+        client_ip, _ = client_socket.getpeername()
 
         # Enviar parámetros públicos al gateway
         payload_public_keys["operation"] = "register"
@@ -240,10 +237,7 @@ def handle_gateway_registration(client_socket):
 
         # Verificar si el gateway ya está registrado
         if gateway_identity in registered_gateways:
-            logger.warning(
-                f"[REG Gateway] El gateway con ID {gateway_identity} ya se encuentra registrado."
-            )
-            raise ValueError("El gateway ya se encuentra registrado.")
+            raise ValueError ("El gateway con ID {gateway_identity} ya se encuentra registrado.")
 
         logger.info(
             f"[REG Gateway] Recibidos datos del gateway: Gateway_Identity={gateway_identity}, X_w_pub_key={X_w_pub_key_dict}"
@@ -294,19 +288,22 @@ def handle_gateway_registration(client_socket):
         encoded_response = encode_message(response)
         client_socket.sendall(json.dumps(encoded_response).encode("utf-8"))
         logger.info("[REG Gateway] Respuesta enviada al gateway.")
-
+        
     except KeyError as e:
-        logger.error(f"Clave faltante en los datos del Gateway: {e}")
+        logger.error(f"Clave faltante en los datos del Gateway: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     except ValueError as e:
-        logger.error(f"Error en el registro del Gateway: {e}")
+        logger.error(f"Error en el registro del Gateway: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     except Exception as e:
-        logger.error(f"Error inesperado durante el registro del Gateway: {e}")
+        logger.error(f"Error inesperado durante el registro del Gateway: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     finally:
         client_socket.close()
         logger.info("[REG Gateway] Conexión con el Gateway cerrada.")
@@ -394,14 +391,15 @@ def handle_id_revocation(client_socket, message):
                     logger.info(f"[REVOC] Respuesta de {gateway_ip}: {response}")
 
             except Exception as e:
-                logger.error(f"[REVOC] Error al conectar con {gateway_ip}: {e}")
+                logger.error(f"[REVOC] Error al conectar con {gateway_ip}: {e.args[0]}")
     
     except ValueError as e:
-        logger.error(f"[REVOC] Error en el mensaje recibido: {e}")
+        logger.error(f"[REVOC] Error en el mensaje recibido: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
+        
     except Exception as e:
-        logger.error(f"[REVOC] Error inesperado durante la revocación: {e}")
+        logger.error(f"[REVOC] Error inesperado durante la revocación: {e.args[0]}")
         response = {"status": "error", "message": str(e)}
         client_socket.sendall(json.dumps(response).encode("utf-8"))
 
