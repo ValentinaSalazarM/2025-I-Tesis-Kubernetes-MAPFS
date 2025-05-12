@@ -4,10 +4,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: mapfs-gateway          # <— debe coincidir con spec.serviceName del StatefulSet
+  name: mapfs-gateway          # Debe coincidir con spec.serviceName del StatefulSet
   namespace: mapfs
 spec:
-  clusterIP: None              # ← headless
+  clusterIP: None              # Headless
   publishNotReadyAddresses: true
   selector:
     app: mapfs-gateway
@@ -55,9 +55,9 @@ metadata:
   name: mapfs-gateway
   namespace: mapfs
 spec:
-  serviceName: mapfs-gateway   # <— referencia al headless
+  serviceName: mapfs-gateway   # Referencia al headless
   replicas: 2
-  podManagementPolicy: Parallel      # arranque simultáneo; cámbialo si necesitas orden
+  podManagementPolicy: Parallel      # Arranque simultáneo
   updateStrategy:
     type: RollingUpdate
   selector:
@@ -71,7 +71,7 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8010"
     spec:
-      terminationGracePeriodSeconds: 30   # tiempo para cerrar sockets
+      terminationGracePeriodSeconds: 30   # Tiempo para cerrar sockets
       containers:
       - name: mapfs-gateway
         image: mapfs-gateway:latest
@@ -83,10 +83,10 @@ spec:
                   fieldPath: metadata.name
         command: ["python", "-m", "gateway.mapfs_gateway"]
         ports:
-        - containerPort: 8010   # métricas
+        - containerPort: 8010   # Métricas
         - containerPort: 5000   # Device‑Gateway
-        - containerPort: 6000   # revocación
-        readinessProbe:         # opcional: espera a que abra el socket
+        - containerPort: 6000   # Revocación
+        readinessProbe:         # Opcional: espera a que abra el socket
           tcpSocket:
             port: 5000
           periodSeconds: 5
@@ -96,7 +96,7 @@ spec:
               command:
               - /bin/sh
               - -c
-              - "sleep 15"      # drenar conexiones antes de SIGTERM
+              - "sleep 15"      # Drenar conexiones antes de SIGTERM
         volumeMounts:
         - name: logs
           mountPath: /logs

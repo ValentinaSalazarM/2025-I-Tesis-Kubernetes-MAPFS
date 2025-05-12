@@ -28,7 +28,7 @@ data:
             labels:
               job: "docker"
               host: "${HOSTNAME}"
-              cluster: "local-cluster-mapfs-kvsm"
+              cluster: "local-cluster-promtail-kvsalazar"
               __path__: /var/lib/docker/containers/*/*-json.log
 
       - job_name: containerd-logs
@@ -39,5 +39,5 @@ data:
             labels:
               job: "k8s-containers"
               host: "${HOSTNAME}"
-              cluster: "local-cluster-mapfs-kvsm"
+              cluster: "local-cluster-promtail-kvsalazar"
               __path__: /var/log/pods/*/*/*.log

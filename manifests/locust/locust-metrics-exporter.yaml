@@ -30,7 +30,7 @@ spec:
             - name: LOCUST_EXPORTER_WEB_TELEMETRY_PATH
               value: "/metrics"
             - name: LOCUST_EXPORTER_URI
-              value: "http://locust-master:8089"   # o locust-master.mapfs.svc.cluster.local
+              value: "http://locust-master:8089"   # O locust-master.mapfs.svc.cluster.local
             - name: LOCUST_EXPORTER_LOG_LEVEL
               value: "debug"
 ---

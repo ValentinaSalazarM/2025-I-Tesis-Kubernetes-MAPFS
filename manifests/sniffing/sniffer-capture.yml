@@ -14,7 +14,7 @@ spec:
       labels:
         app: sniffer-capture
     spec:
-      # hostNetwork: true => Pod comparte red con el host, como network_mode: host en Docker
+      # Pod comparte red con el host, como network_mode: host en Docker
       hostNetwork: true
       # También es frecuente usar hostPID: true y/o hostIPC: true si hiciera falta
       securityContext:
@@ -23,16 +23,15 @@ spec:
       - name: sniffer-capture
         image: sniffer-capture:latest
         imagePullPolicy: Never  
-        # Si necesitas privilegios completos en lugar de solo NET_ADMIN:
         securityContext:
           privileged: true
           capabilities:
             add: ["NET_ADMIN","NET_RAW"]
         volumeMounts:
           - name: shared-data
-            mountPath: /shared_data    # donde guardará los PCAP
+            mountPath: /shared_data    # Donde guardará los PCAP
           - name: logs
-            mountPath: /logs          # donde guardará logs
+            mountPath: /logs          # Donde guardará logs
         env:
           - name: LOG_DIR
             value: /logs
